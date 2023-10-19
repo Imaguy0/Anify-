@@ -14,11 +14,11 @@ export async function scrapeCorsProxies(): Promise<void> {
     try {
         do {
             const data = await search("c7d96235df80ea051e9d57f3ab6d3e4da289fd3b", cursor);
-            if (!data) {
+            if (!data || !data.result || !data.result.hits) {
                 break;
-            }
-
-            data.result.hits.filter((hit) => {
+              }
+              
+              data.result.hits.filter((hit) => {
                 hit.services.some((service) => {
                     if (service.extended_service_name === "HTTP" || service.extended_service_name === "HTTPS") {
                         hits.push({ ip: hit.ip, port: service.port });
