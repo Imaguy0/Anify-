@@ -27,13 +27,13 @@ const authenticationConfig = {
 
 const configs = [frontendConfig, backendConfig, authenticationConfig];
 
-async function readEnv(process: Process): Promise<string | undefined> {
-  const env = Bun.file(`../${process}/.env`);
+async function readEnv(processName) {
+  const env = Bun.file(`../${processName}/.env`);
   if (await env.exists()) {
     const data = await env.text();
 
     // Return as JSON like { "key": "value" }
-    const result: { [key: string]: string } = {};
+    const result = {};
     data.split("\n").forEach((line) => {
       const [key, value] = line.split("=");
       result[key] = value;
@@ -65,18 +65,18 @@ async function start() {
   console.log(colors.green("Started services!"));
 }
 
-export async function remove(process: Process) {
+export async function remove(process) {
   return new Promise((resolve, reject) => {
-    exec(`pm2 delete ${process}`, (error, stdout, stderr) => {
+    exec(`killall -9 ${process}`, (error, stdout, stderr) => {
       if (error) reject(error);
       else resolve(true);
     });
   });
 }
 
-export async function stop(process: Process) {
+export async function stop(process) {
   return new Promise((resolve, reject) => {
-    exec(`pm2 stop ${process}`, (error, stdout, stderr) => {
+    exec(`killall ${process}`, (error, stdout, stderr) => {
       if (error) reject(error);
       else resolve(true);
     });
@@ -104,8 +104,8 @@ process.on("SIGINT", async () => {
   process.exit();
 });
 
-export enum Process {
-  FRONTEND = "anify-frontend",
-  BACKEND = "anify-backend",
-  AUTH = "anify-auth",
-}
+export const Process = {
+  FRONTEND: "anify-frontend",
+  BACKEND: "anify-backend",
+  AUTH: "anify-auth",
+};
