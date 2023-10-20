@@ -1,5 +1,6 @@
 import { exec } from "child_process";
 import colors from "colors";
+import pify from "pify";
 
 const frontendConfig = {
   name: "anify-frontend",
@@ -26,68 +27,80 @@ const authenticationConfig = {
 };
 
 const configs = [frontendConfig, backendConfig, authenticationConfig];
+const pExec = pify(exec);
 
 async function readEnv(processName) {
   const env = Bun.file(`../${processName}/.env`);
   if (await env.exists()) {
     const data = await env.text();
-
-    // Return as JSON like { "key": "value" }
     const result = {};
     data.split("\n").forEach((line) => {
       const [key, value] = line.split("=");
       result[key] = value;
     });
-
     return JSON.stringify(result);
   } else return undefined;
 }
 
-async function start() {
-  /*
-  const backendEnv = await readEnv(Process.BACKEND);
-  if (backendEnv) Object.assign(backendConfig, { env: backendEnv });
+async function start(showLogs) {
+  await Promise.all(
+    configs.map((config) =>
+      new Promise((resolve, reject) => {
+        const process = exec(config.script);
+        if (showLogs) {
+          process.stdout.on("data", (data) => {
+            console.log(colors.yellow(`[${config.name}] Output:`));
+            console.log(data);
+          });
 
-  const frontendEnv = await readEnv(Process.FRONTEND);
-  if (frontendEnv) Object.assign(frontendConfig, { env: frontendEnv });
-
-  const authEnv = await readEnv(Process.AUTH);
-  if (authEnv) Object.assign(authenticationConfig, { env: authEnv });
-  */
-
-  await Promise.all(configs.map((config) => new Promise((resolve, reject) => {
-    exec(config.script, (error) => {
-      if (error) reject(error);
-      else resolve(true);
-    });
-  })));
+          process.stderr.on("data", (data) => {
+            console.error(colors.red(`[${config.name}] Error:`));
+            console.error(data);
+          });
+        }
+        process.on("close", (code) => {
+          resolve(code);
+        });
+        process.on("error", (error) => {
+          reject(error);
+        });
+      })
+    )
+  );
 
   console.log(colors.green("Started services!"));
 }
 
-export async function remove(process) {
+export const remove = pify((process) => exec(`killall -9 ${process}`));
+
+export const stop = (process) => {
   return new Promise((resolve, reject) => {
-    exec(`killall -9 ${process}`, (error, stdout, stderr) => {
-      if (error) reject(error);
-      else resolve(true);
+    exec(`pgrep -f ${process}`, (error, stdout, stderr) => {
+      if (error) {
+        reject(error);
+      }
+      const pids = stdout.split("\n").filter((pid) => pid !== "");
+      pids.forEach((pid) => {
+        exec(`kill -9 ${pid}`, (err, result) => {
+          if (err) {
+            reject(err);
+          }
+        });
+      });
+      resolve(true);
     });
   });
-}
+};
 
-export async function stop(process) {
-  return new Promise((resolve, reject) => {
-    exec(`killall ${process}`, (error, stdout, stderr) => {
-      if (error) reject(error);
-      else resolve(true);
-    });
-  });
-}
-
-start();
+start(true); // Start the services with logs enabled
 
 process.on("beforeExit", async () => {
   console.log(colors.red("Stopping services..."));
-  await Promise.all([remove(Process.FRONTEND), remove(Process.BACKEND), remove(Process.AUTH)]).catch((err) => {
+  await Promise.all([
+    stop(frontendConfig.name),
+    stop(backendConfig.name),
+    stop(authenticationConfig.name)
+  ]).catch((err) => {
     console.error(colors.red("Error: "), err);
   });
 });
@@ -98,9 +111,14 @@ process.on("unhandledRejection", (err) => {
 
 process.on("SIGINT", async () => {
   console.log(colors.red("Stopping services..."));
-  await Promise.all([remove(Process.FRONTEND), remove(Process.BACKEND), remove(Process.AUTH)]).catch((err) => {
+  await Promise.all([
+    stop(frontendConfig.name),
+    stop(backendConfig.name),
+    stop(authenticationConfig.name)
+  ]).catch((err) => {
     console.error(colors.red("Error: "), err);
   });
+
   process.exit();
 });
 
